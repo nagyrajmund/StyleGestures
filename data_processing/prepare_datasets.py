@@ -159,7 +159,7 @@ if __name__ == "__main__":
     data_root = '../data/trinity/source'
     bvhpath = os.path.join(data_root, 'bvh')
     audiopath = os.path.join(data_root, 'audio')
-    held_out = ['NaturalTalking_007']
+    held_out = ['Recording_007']
     processed_dir = '../data/trinity/processed'    
     
     files = []

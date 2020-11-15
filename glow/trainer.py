@@ -263,7 +263,7 @@ class Trainer(object):
                          
                 # generate samples and save
                 if self.global_step % self.plot_gaps == 0 and self.global_step > 0:   
-                    self.generate_sample(eps_std=1.0)
+                    self.generate_sample(eps_std=1.0, counter=epoch)
 
                 # global step
                 self.global_step += 1
