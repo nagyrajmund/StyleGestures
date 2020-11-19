@@ -6,6 +6,7 @@ import sys
 from shutil import copyfile
 from motion_features import extract_joint_angles, extract_hand_pos, extract_style_features
 from audio_features import extract_melspec
+from text_features import extract_text_features
 import scipy.io.wavfile as wav
 from pymo.parsers import BVHParser
 from pymo.data import Joint, MocapData
@@ -81,8 +82,14 @@ def align(data1, data2):
         return np.concatenate((data1, data2[:nframes1,:]), axis=1)
     else:
         return np.concatenate((data1[:nframes2,:], data2), axis=1)
+
+def align(data1, data2, data3):
+    data_lengths = [data1.shape[0], data2.shape[0], data3.shape[0]]
+    min_len = min(data_lengths)
+
+    return np.concatenate((data1[:min_len], data2[:min_len], data3[:min_len]), axis=1)
         
-def import_data(file, motion_path, speech_data, style_path, mirror=False, start=0, end=None):
+def import_data(file, motion_path, speech_data, text_path, style_path, mirror=False, start=0, end=None):
     """Loads a file and concatenate all features to one [time, features] matrix. 
      NOTE: All sources will be truncated to the shortest length, i.e. we assume they
      are time synchronized and has the same start time."""
@@ -95,12 +102,13 @@ def import_data(file, motion_path, speech_data, style_path, mirror=False, start=
     n_motion_feats = motion_data.shape[1]
 
     speech_data = np.load(os.path.join(speech_path, file + '.npy')).astype(np.float32)
-    
+    text_data = np.load(os.path.join(text_path, file + '.npy')).astype(np.float32)
+
     if style_path is not None:
         style_data = np.load(os.path.join(style_path, file + suffix + '.npy')).astype(np.float32)
-        control_data = align(speech_data,style_data[:])
+        control_data = align(speech_data, text_data, style_data[:])
     else:
-        control_data = speech_data
+        control_data = align(speech_data, text_data)
         
     concat_data = align(motion_data, control_data)
     
@@ -109,7 +117,7 @@ def import_data(file, motion_path, speech_data, style_path, mirror=False, start=
         
     return concat_data[start:end,:], n_motion_feats
 
-def import_and_slice(files, motion_path, speech_data, style_path, slice_window, slice_overlap, mirror=False, start=0, end=None):
+def import_and_slice(files, motion_path, speech_data, text_path, style_path, slice_window, slice_overlap, mirror=False, start=0, end=None):
     """Imports all features and slices them to samples with equal lenth time [samples, timesteps, features]."""
                     
     fi=0
@@ -117,11 +125,11 @@ def import_and_slice(files, motion_path, speech_data, style_path, slice_window, 
         print(file)
         
         # slice dataset
-        concat_data, n_motion_feats = import_data(file, motion_path, speech_data, style_path, False, start, end)        
+        concat_data, n_motion_feats = import_data(file, motion_path, speech_data, text_path, style_path, False, start, end)        
         sliced = slice_data(concat_data, slice_window, slice_overlap)                
         
         if mirror:
-            concat_mirr, nmf = import_data(file, motion_path, speech_data, style_path, True, start, end)
+            concat_mirr, nmf = import_data(file, motion_path, speech_data, text_path, style_path, True, start, end)
             sliced_mirr = slice_data(concat_mirr, slice_window, slice_overlap)
             
             # append to the sliced dataset
@@ -159,6 +167,7 @@ if __name__ == "__main__":
     data_root = '../data/trinity/source'
     bvhpath = os.path.join(data_root, 'bvh')
     audiopath = os.path.join(data_root, 'audio')
+    text_input_path = os.path.join(data_root, 'text')
     held_out = ['Recording_007']
     processed_dir = '../data/trinity/processed'    
     
@@ -175,7 +184,7 @@ if __name__ == "__main__":
     print(files)
     motion_feat = 'joint_rot'
     speech_feat = 'melspec'
-    
+    text_feature_name = 'text_features'
     # processed data will be organized as following
     if not os.path.exists(processed_dir):
         os.makedirs(processed_dir)
@@ -183,6 +192,7 @@ if __name__ == "__main__":
     path = os.path.join(processed_dir, f'features_{fps}fps')
     motion_path = os.path.join(path, f'{motion_feat}')
     speech_path = os.path.join(path, f'{speech_feat}')
+    text_output_path = os.path.join(path, f'{text_feature_name}')
     hand_path = os.path.join(path, 'hand_pos')
     vel_path = os.path.join(path, 'MG-V')
     radius_path = os.path.join(path,'MG-R')
@@ -201,6 +211,14 @@ if __name__ == "__main__":
     else:
         print('Found speech features. skipping processing...')
     
+    # text features
+    if not os.path.exists(text_output_path):
+        print('Processing text features...')
+        os.makedirs(text_output_path)
+        extract_text_features(text_input_path, files, text_output_path, fps)
+    else:
+        print('Found text features. skipping processing...')
+
     # upper body joint angles
     if not os.path.exists(motion_path):
         print('Processing motion features...')
@@ -240,12 +258,12 @@ if __name__ == "__main__":
     slice_win_test = test_window_secs*fps
     val_test_split = 20*test_window_secs*fps # 10 
     
-    train_motion, train_ctrl = import_and_slice(train_files, motion_path, speech_path, style_path, slice_win_train, window_overlap, mirror=True)
-    val_motion, val_ctrl = import_and_slice(held_out, motion_path, speech_path, style_path, slice_win_train, window_overlap, mirror=True, start=0, end=val_test_split)
+    train_motion, train_ctrl = import_and_slice(train_files, motion_path, speech_path, text_output_path, style_path, slice_win_train, window_overlap, mirror=True)
+    val_motion, val_ctrl = import_and_slice(held_out, motion_path, speech_path, text_output_path, style_path, slice_win_train, window_overlap, mirror=True, start=0, end=val_test_split)
 
     # the following sets are cut into longer clips without overlap. These are used for subjective evaluations during tuning (dev) and evaluation (test)
-    dev_motion, dev_ctrl = import_and_slice(held_out, motion_path, speech_path, style_path, slice_win_test, 0, mirror=False, start=0, end=val_test_split)
-    test_motion, test_ctrl = import_and_slice(held_out, motion_path, speech_path, style_path, slice_win_test, 0, mirror=False, start=val_test_split)
+    dev_motion, dev_ctrl = import_and_slice(held_out, motion_path, speech_path, text_output_path, style_path, slice_win_test, 0, mirror=False, start=0, end=val_test_split)
+    test_motion, test_ctrl = import_and_slice(held_out, motion_path, speech_path, text_output_path, style_path, slice_win_test, 0, mirror=False, start=val_test_split)
     
     # if style controlled, set the control values to 15%, 50% and 85% quantiles
     if style_path is not None:

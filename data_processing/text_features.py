@@ -3,7 +3,7 @@ import numpy as np
 import re
 import json
 
-def extract_text_embeddings(input_dir, files, output_dir, fps, model="BERT"):
+def extract_text_features(input_dir, files, output_dir, fps, model="BERT"):
     embedding_model = create_embedding(model)
 
     for file in filenames:
