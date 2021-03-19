@@ -15,6 +15,66 @@ from pymo.preprocessing import *
 from pymo.writers import *
 import joblib as jl
 
+
+SAGA_JOINTS = [
+    #    "Pelvis", 
+    "Spine_01",
+    "Spine_02",
+    "Spine_03",
+    "Neck",
+
+    "L_Clavice",
+    "L_Shoulder",
+    "L_Elbow",  
+    "L_Wrist",
+    
+    "L_Hand_Thumb_00",
+    "L_Hand_Thumb_01",
+    "L_Hand_Thumb_02",
+
+    "L_Hand_Index_00",
+    "L_Hand_Index_01",
+    "L_Hand_Index_02",
+
+    "L_Hand_Middle_00",
+    "L_Hand_Middle_01",
+    "L_Hand_Middle_02",
+
+    "L_Hand_Ring_00",
+    "L_Hand_Ring_01",
+    "L_Hand_Ring_02",
+
+    "L_Hand_Little_00",
+    "L_Hand_Little_01",
+    "L_Hand_Little_02",
+
+    "R_Clavice",
+    "R_Shoulder",
+    "R_Elbow",  
+    "R_Wrist",
+    
+    "R_Hand_Thumb_00",
+    "R_Hand_Thumb_01",
+    "R_Hand_Thumb_02",
+
+    "R_Hand_Index_00",
+    "R_Hand_Index_01",
+    "R_Hand_Index_02",
+
+    "R_Hand_Middle_00",
+    "R_Hand_Middle_01",
+    "R_Hand_Middle_02",
+
+    "R_Hand_Ring_00",
+    "R_Hand_Ring_01",
+    "R_Hand_Ring_02",
+
+    "R_Hand_Little_00",
+    "R_Hand_Little_01",
+    "R_Hand_Little_02"
+]
+
+
 def nan_smooth(data, filt_len):
 
     win=filt_len//2
@@ -32,6 +92,42 @@ def nan_smooth(data, filt_len):
             en = i+win+1
         out[i,:] = np.nanmean(data[st:en,:], axis=0)
     return out
+
+def extract_joint_angles_saga(bvh_dir, files, destpath, fps):
+    p = BVHParser()
+
+    data_all = list()
+    print("Importing data...")
+    for f in files:
+        ff = os.path.join(bvh_dir, f + '.bvh')
+        print(ff)
+        data_all.append(p.parse(ff))
+
+    data_pipe = Pipeline([
+        ('dwnsampl', DownSampler(tgt_fps=fps, keep_all=False)),
+        ('mir', Mirror(axis='X', append=True)),
+        ('jtsel', JointSelector(SAGA_JOINTS, include_root=True)),
+        ('root', RootTransformer('pos_rot_deltas', position_smoothing=5, rotation_smoothing=10)),
+        ('exp', MocapParameterizer('expmap')), 
+        ('cnst', ConstantsRemover()),
+        ('npf', Numpyfier())
+    ])
+
+    print("Processing...")
+    out_data = data_pipe.fit_transform(data_all)
+    
+    # the datapipe will append the mirrored files to the end
+    assert len(out_data) == 2*len(files)
+    
+    jl.dump(data_pipe, os.path.join(destpath, 'data_pipe.sav'))
+        
+    fi=0
+    for f in files:
+        ff = os.path.join(destpath, f)
+        print(ff)
+        np.savez(ff + ".npz", clips=out_data[fi])
+        np.savez(ff + "_mirrored.npz", clips=out_data[len(files)+fi])
+        fi=fi+1
 
 def extract_joint_angles(bvh_dir, files, destpath, fps, fullbody=False):
     p = BVHParser()
