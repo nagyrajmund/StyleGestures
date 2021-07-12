@@ -12,7 +12,23 @@ from pymo.parsers import BVHParser
 from pymo.data import Joint, MocapData
 from pymo.preprocessing import *
 from pymo.writers import *
+from sklearn.preprocessing import StandardScaler
+import joblib as jl
 
+def fit_and_standardize(data):
+
+    shape = data.shape
+    flat = data.copy().reshape((shape[0]*shape[1], shape[2]))
+    scaler = StandardScaler().fit(flat)
+    scaled = scaler.transform(flat).reshape(shape)
+    return scaled, scaler
+    
+def standardize(data, scaler):
+    shape = data.shape
+    flat = data.copy().reshape((shape[0]*shape[1], shape[2]))
+    scaled = scaler.transform(flat).reshape(shape)
+    return scaled
+    
 def cut_audio(filename, timespan, destpath, starttime=0.0, endtime=-1.0):
     print(f'Cutting AUDIO {filename} into intervals of {timespan}')
     fs,X = wav.read(filename)
@@ -164,18 +180,18 @@ if __name__ == "__main__":
     window_overlap = 0.5
     fps = 20
 
-    data_root = '../data/trinity/source'
+    data_root = '../data/GENEA/source'
     bvhpath = os.path.join(data_root, 'bvh')
     audiopath = os.path.join(data_root, 'audio')
     text_input_path = os.path.join(data_root, 'text')
-    held_out = ['Recording_007']
-    processed_dir = '../data/trinity/processed'    
+    held_out = ['Recording_008']
+    processed_dir = '../data/GENEA/processed'    
     
     files = []
     
     # r=root, d=directories, f = files
     for r, d, f in os.walk(bvhpath):
-        for file in f:
+        for file in sorted(f):
             if '.bvh' in file:
                 ff=os.path.join(r, file)
                 basename = os.path.splitext(os.path.basename(ff))[0]
@@ -225,7 +241,7 @@ if __name__ == "__main__":
         os.makedirs(motion_path)
         extract_joint_angles(bvhpath, files, motion_path, fps, fullbody=False)
         # full body joint angles
-        #extract_joint_angles(bvhpath, files, motion_path, fps, fullbody=True)
+        #extract_joint_angles(bvhpath, files, motion_path, fps, fullbody=True, smooth_pos=5, smooth_rot=10)
     else:
         print('Found motion features. skipping processing...')
     
@@ -275,6 +291,17 @@ if __name__ == "__main__":
         test_ctrl[2::3,:,-1].fill(np.quantile(train_ctrl[:,:,-1],0.85))
                     
     #import pdb;pdb.set_trace()
+    train_ctrl, input_scaler = fit_and_standardize(train_ctrl)
+    train_motion, output_scaler = fit_and_standardize(train_motion)
+    val_ctrl = standardize(val_ctrl, input_scaler)
+    val_motion = standardize(val_motion, output_scaler)
+    dev_ctrl = standardize(dev_ctrl, input_scaler)
+    dev_motion = standardize(dev_motion, output_scaler)
+    test_ctrl = standardize(test_ctrl, input_scaler)
+    test_motion = standardize(test_motion, output_scaler)
+        
+    jl.dump(input_scaler, os.path.join(processed_dir,f'input_scaler.sav'))         
+    jl.dump(output_scaler, os.path.join(processed_dir,f'output_scaler.sav'))         
     np.savez(os.path.join(processed_dir,f'train_output_{fps}fps.npz'), clips = train_motion)
     np.savez(os.path.join(processed_dir,f'train_input_{fps}fps.npz'), clips = train_ctrl)
     np.savez(os.path.join(processed_dir,f'val_output_{fps}fps.npz'), clips = val_motion)

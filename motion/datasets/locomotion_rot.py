@@ -17,21 +17,17 @@ def inv_standardize(data, scaler):
     scaled = scaler.inverse_transform(flat).reshape(shape)
     return scaled        
                 
-
-class Trinity():
+class Locomotion_rot():
 
     def __init__(self, hparams, is_training):
         data_root = hparams.Dir.data_root
-
+        
         #load scalers.
         self.input_scaler = jl.load(os.path.join(data_root, 'input_scaler.sav'))
-        self.output_scaler = jl.load(os.path.join(data_root, 'output_scaler.sav'))
-        
-        #load pipeline for convertion from motion features to BVH.
+        self.output_scaler = jl.load(os.path.join(data_root, 'output_scaler.sav'))        
         self.data_pipe = jl.load(os.path.join(data_root, 'data_pipe_'+str(hparams.Data.framerate)+'fps.sav'))
-
-        if is_training:
         
+        if is_training:
             #load the data. This should allready be Standartized
             train_input = np.load(os.path.join(data_root, 'train_input_'+str(hparams.Data.framerate)+'fps.npz'))['clips'].astype(np.float32)
             train_output = np.load(os.path.join(data_root, 'train_output_'+str(hparams.Data.framerate)+'fps.npz'))['clips'].astype(np.float32)
@@ -44,11 +40,9 @@ class Trinity():
             
             #test data for network tuning. It contains the same data as val_input, but sliced into longer 20-sec exerpts
             test_input = np.load(os.path.join(data_root, 'dev_input_'+str(hparams.Data.framerate)+'fps.npz'))['clips'].astype(np.float32)                                   
-            
         else:
             self.train_dataset = None
             self.validation_dataset = None
-            #use this to generate test data for evaluation.
             test_input = np.load(os.path.join(data_root, 'test_input_'+str(hparams.Data.framerate)+'fps.npz'))['clips'].astype(np.float32)
                        
         # make sure the test data is at least one batch size
@@ -67,7 +61,9 @@ class Trinity():
         self.fps = hparams.Data.framerate
 
     def save_animation(self, control_data, motion_data, filename):
-        anim_clips = inv_standardize(motion_data[:self.n_test,:,:], self.output_scaler)
+        #import pdb;pdb.set_trace()
+        anim_data = np.concatenate((inv_standardize(motion_data, self.output_scaler), inv_standardize(control_data, self.input_scaler)), axis=2)
+        anim_clips = anim_data[:(self.n_test),:,:]
         np.savez(filename + ".npz", clips=anim_clips)  
         self.write_bvh(anim_clips, filename)
         

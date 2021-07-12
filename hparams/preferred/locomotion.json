@@ -11,20 +11,21 @@
         "flow_coupling": "affine",
         "network_model": "LSTM",
         "num_layers": 2,
-        "LU_decomposed": true
+        "LU_decomposed": true,
+		"distribution": "normal"
     },
     "Data" : {
         "framerate": 20,
         "seqlen": 10,
         "n_lookahead":0, 
-        "dropout":0.95, 
+        "dropout":0.7, 
         "mirror":true, 
         "reverse_time":true 
     },
     "Optim": {
         "name": "adam",
         "args": {
-            "lr": 1e-4,
+            "lr": 1e-3,
             "betas": [0.9, 0.999],
             "eps": 1e-8
         },
@@ -37,12 +38,12 @@
         }
     },
     "Device": {
-        "glow": ["cuda:3"],
-        "data": "cuda:3"
+        "glow": ["cuda:7"],
+        "data": "cuda:7"
     },
     "Train": {
         "batch_size": 100,
-        "num_batches": 160000,
+        "num_batches": 80000,
         "max_grad_clip": 5,
         "max_grad_norm": 100,
         "max_checkpoints": 20,
